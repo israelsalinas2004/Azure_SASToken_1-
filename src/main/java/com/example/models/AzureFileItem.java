@@ -24,6 +24,13 @@ public class AzureFileItem {
     public AzureFileItem(){}
     
     
+	public AzureFileItem(String name, OffsetDateTime creationTime, OffsetDateTime lastModified2) {
+	    fileName = name;
+	    createdOn = creationTime;
+	    lastModified = lastModified2;
+	}
+
+
 	public String getFileName() {
 		return fileName;
 	}

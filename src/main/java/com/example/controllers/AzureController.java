@@ -4,9 +4,13 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystems;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -15,37 +19,37 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
+import org.springframework.web.servlet.view.RedirectView;
 
 import com.example.services.*;
 import com.microsoft.applicationinsights.core.dependencies.apachecommons.io.output.ByteArrayOutputStream;
-import com.azure.storage.file.share.ShareClient;
-import com.azure.storage.file.share.ShareDirectoryClient;
-import com.azure.storage.file.share.ShareServiceClient;
-import com.azure.storage.file.share.ShareServiceClientBuilder;
-import com.azure.storage.file.share.models.ShareFileItem;
-import com.azure.core.http.rest.PagedIterable;
+
+import jakarta.persistence.criteria.Path;
+
 import com.azure.storage.blob.BlobClient;
-import com.azure.storage.blob.BlobClientBuilder;
-import com.azure.storage.blob.BlobContainerAsyncClient;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobContainerClientBuilder;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.BlobServiceClientBuilder;
-import com.azure.storage.blob.models.BlobItem;
-import com.azure.storage.blob.models.BlobListDetails;
-import com.azure.storage.blob.models.ListBlobsOptions;
+import com.azure.storage.blob.specialized.BlockBlobClient;
+import com.azure.storage.common.StorageSharedKeyCredential;
 import com.example.contratos.*;
 import com.example.models.*;
+import java.io.InputStream;
+import java.io.ByteArrayInputStream;
 
 
 
 @RestController
 public class AzureController {
   
+	// DOCUMENTACION
+	// https://learn.microsoft.com/en-us/azure/storage/common/storage-samples-java
+	// POM.XML ==> 13/12/2024 : ERROR  Empezo a funcionar hasta que te fuiste a una version anterior ..12.10.2
+	// ERRO: Reactor.Core ==> ; colocar exclusions en pom.xml https://learn.microsoft.com/en-us/answers/questions/1188887/error-occurs-java-lang-nosuchmethoderror-reactor-c
+	
 	//http://localhost:9100/azuredatatools/listFile
     private IAzureDataToolService _azureDataToolsService;
     
@@ -61,13 +65,19 @@ public class AzureController {
     
 
     //Si las anotaciones no estan funcionando, entonces hacer explicito las metodos
-    @Autowired
-	public AzureController(IAzureDataToolService azureDataToolsService)
+    public AzureController(IAzureDataToolService azureDataToolsService)
 	{
 		this._azureDataToolsService=azureDataToolsService;		
 	}	
+    
+    //http://localhost:9100/azure/hello
+	@GetMapping("/hello")
+	public String sayHello() {
+		return "Hola Mundo!";
+	}
 	
-    @PostMapping(value = "/azuredatatools/listFile" )
+	
+    @PostMapping(value = "/azuredatatools/omp_listfiles" )
     //@RequestMapping( consumes  = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<List<AzureFileItem>> AzureDataToolsFileListFile(@RequestBody AzureDataToolsRequest modelo){
         HttpStatus httpStatus = HttpStatus.OK;
@@ -78,52 +88,46 @@ public class AzureController {
         return new ResponseEntity<>(resultado,httpStatus);
     }
 	
-    //http://localhost:9100/azure/hello
-	@RequestMapping(method = RequestMethod.GET, value = "/hello")
-	public String sayHello() {
-		return "Hola Mundo!";
-	}
-	
 
-	//http://localhost:9100/azure_listfiles
-	@RequestMapping(method = RequestMethod.GET, value = "/azure_listfiles")
-	public String AzureListFiles() {
-
-		StringBuilder result = new StringBuilder();
+	//http://localhost:9100/azure_listfiles_containers
+	@PostMapping("/azure_listfiles_containers")
+	public String AzureListFiles_Containers() {
 		
-	    try 
-	    {
-        	BlobContainerClient blobContainerClient = new BlobContainerClientBuilder()
-                    .connectionString(_storageConnectionString)
-                    .containerName(_blogStorage_ContainerName)
-                    .buildClient();
-        	
-	    	for (BlobItem  blobItem  :  blobContainerClient.listBlobs()) {
-	    		result.append("\t" + blobItem.getName());
-	    	}
-        	
-	    	/*
-        	BlobContainerClient blobContainerClient = new BlobContainerClientBuilder()
-                    .connectionString(_storageConnectionString)
-                    .containerName(_blogStorage_ContainerName)
-                    .buildClient();
-	    	 
-	    	
-	    	for (BlobItem  blobItem  :  blobContainerClient.listBlobs()) {
-	    		result.append("\t" + blobItem.getName());
-	    	}
-	    	*/
-		        
-	    } catch (Exception ex) {
-	        result.append("Error: ").append(ex.getMessage());
-	    }
+		StringBuilder result = new StringBuilder();	
 
+		try
+		{	
+			String accountName = "miblobstoragedisrupting1";
+	        String accountKey = "K8tAgI7Kuzr4+qpn9wxVe5fkQI2i386txdtpiAnrDSFvPAVJbN9nL0d1PUpmSgbzIg5bJaS0sbxv+AStU14NdQ==";
+			StorageSharedKeyCredential credential = new StorageSharedKeyCredential(accountName, accountKey);
+			String endpoint = String.format(Locale.ROOT, "https://%s.blob.core.windows.net", accountName);
+			
+			BlobServiceClient storageClient = new BlobServiceClientBuilder()
+												  .endpoint(endpoint)
+												  .credential(credential)
+												  .buildClient();
+			
+	        BlobContainerClient blobContainerClient = storageClient.getBlobContainerClient("mi-contenedor1");
+	        System.out.println("Blob name: " + blobContainerClient.exists());
+	        
+	        
+	        blobContainerClient.listBlobs()
+            .forEach(blobItem -> 
+            	result.append("\nBlob name: " + blobItem.getName()+ ", Snapshot: " + blobItem.getSnapshot())
+            );
+
+		}
+		catch(Exception ex) {
+			result.append("\tError: " + ex.getMessage());
+		}
+
+        //result.append("\t" + blobItem.getName());
 	    return result.toString();
 	}
-	
 
+    
 	//http://localhost:9100/azure_createfile
-	@RequestMapping(method = RequestMethod.GET, value = "/azure_createfile")
+	@GetMapping("/azure_createfile_container")
 	public String Azure_CreateFile() {
 		
         String result = "";
@@ -132,13 +136,30 @@ public class AzureController {
         
         try
         {
-        	BlobContainerClient blobContainerClient = new BlobContainerClientBuilder()
-                    .connectionString(_storageConnectionString)
-                    .containerName(_blogStorage_ContainerName)
-                    .buildClient();
+			String accountName = "miblobstoragedisrupting1";
+	        String accountKey = "K8tAgI7Kuzr4+qpn9wxVe5fkQI2i386txdtpiAnrDSFvPAVJbN9nL0d1PUpmSgbzIg5bJaS0sbxv+AStU14NdQ==";
+			StorageSharedKeyCredential credential = new StorageSharedKeyCredential(accountName, accountKey);
+			String endpoint = String.format(Locale.ROOT, "https://%s.blob.core.windows.net", accountName);
+						
+			BlobServiceClient storageClient = new BlobServiceClientBuilder()
+												  .endpoint(endpoint)
+												  .credential(credential)
+												  .buildClient();
+			
+	        BlobContainerClient blobContainerClient = storageClient.getBlobContainerClient("mi-contenedor1");
 
-            BlobClient blobClient = blobContainerClient.getBlobClient(blobName_file);
-            blobClient.uploadFromFile(filePath);            
+	        BlockBlobClient blobClient = blobContainerClient
+	        							 .getBlobClient("Ejemplo de archivo creado.txt")
+	        							 .getBlockBlobClient();
+
+	        String data = "Hello world!";
+	        InputStream dataStream = new ByteArrayInputStream(data.getBytes(StandardCharsets.UTF_8));
+	        blobClient.upload(dataStream, data.length());
+
+	        dataStream.close();
+	        
+	        
+	        
             System.out.println("El archivo se ha subido correctamente al contenedor de blobs.");
 
             result += "OK (200)";
@@ -153,33 +174,34 @@ public class AzureController {
 	
 
 	//http://localhost:9100/azure_downloadfile
-	@RequestMapping(method = RequestMethod.GET, value = "/azure_downloadfile")
-	public String Azure_DownloadFile(String filenametodownload) {
+	@PostMapping("/azure_downloadfile")
+	public String Azure_DownloadFile(@RequestBody RequestData requestData) throws IOException {
 		
+		String filename = requestData.getFilename();
         String result = "";
         String filePath = "C:\\Users\\IsraelContreras\\Downloads\\";
         
         try
         {
-        	System.out.println("Archivo a descargar:" +  filenametodownload);
-        	
-        	BlobContainerClient blobContainerClient = new BlobContainerClientBuilder()
-                    .connectionString(_storageConnectionString)
-                    .containerName(_blogStorage_ContainerName)
-                    .buildClient();
-        	
-        
-        	//Tomo el achivo
-            BlobClient blobClient = blobContainerClient.getBlobClient(filenametodownload);
- 
-            //lo guardo en un objeto
-            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-            blobClient.downloadStream(outputStream);		
-            
-            //Si lo quiero guardar en una localidad fisica
-            FileOutputStream fileOutputStream = new FileOutputStream(filePath+filenametodownload);
-            outputStream.writeTo(fileOutputStream);
-        	 
+			String accountName = "miblobstoragedisrupting1";
+	        String accountKey = "K8tAgI7Kuzr4+qpn9wxVe5fkQI2i386txdtpiAnrDSFvPAVJbN9nL0d1PUpmSgbzIg5bJaS0sbxv+AStU14NdQ==";
+			StorageSharedKeyCredential credential = new StorageSharedKeyCredential(accountName, accountKey);
+			String endpoint = String.format(Locale.ROOT, "https://%s.blob.core.windows.net", accountName);
+			
+			System.out.println("Parametro recibido: " + filename);
+			
+			BlobServiceClient storageClient = new BlobServiceClientBuilder()
+												  .endpoint(endpoint)
+												  .credential(credential)
+												  .buildClient();
+			
+	        BlobContainerClient blobContainerClient = storageClient.getBlobContainerClient("mi-contenedor1");
+	        BlobClient blobClient = blobContainerClient.getBlobClient(filename);
+	        
+	        //Guarda archivo
+	        String localFilePath = filePath + filename;
+			blobClient.downloadToFile(localFilePath);
+			System.out.println("Archivo descargado exitosamente.");	        
         	
             result += "OK (200)";
         }        
@@ -192,5 +214,12 @@ public class AzureController {
 	}
 
 	
+    //http://localhost:9100/salesforce_authentication?token=12345
+    @GetMapping("/salesforce_authentication")
+    public RedirectView salesforceAuthentication(@RequestParam String token) {
+        String redirectURL = "https://omp-uat-nt.azurewebsites.net/login?token=" + token;
+        
+        return new RedirectView(redirectURL);
+    }
 	
 }
